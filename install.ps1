@@ -10,12 +10,15 @@
   terminal, desktop. Default: both (desktop only where the tool supports opening a folder).
 .PARAMETER NoPrompt
   Do not ask questions; install everything that was detected (or selected with -Tools/-Modes).
+.PARAMETER Configure
+  Reopen the checklist to change which entries appear, starting from your previous choice.
 #>
 param(
     [string]$Label,
     [ValidateSet('claude', 'codex', 'opencode')][string[]]$Tools,
     [ValidateSet('terminal', 'desktop')][string[]]$Modes = @('terminal', 'desktop'),
-    [switch]$NoPrompt
+    [switch]$NoPrompt,
+    [switch]$Configure
 )
 
 $ErrorActionPreference = 'Stop'
@@ -40,32 +43,64 @@ function Test-DesktopInstalled([string]$id) {
     }
 }
 
-# --- Detect and choose ------------------------------------------------------
-$interactive = -not $NoPrompt -and [Environment]::UserInteractive -and -not $Tools
-$entries = @()   # each: @{ Tool; Mode }
-foreach ($t in $catalog) {
-    if ($Tools -and $Tools -notcontains $t.Id) { continue }
-    $cli = [bool](Get-Command $t.Exe -ErrorAction SilentlyContinue)
-    $app = $t.Desktop -and (Test-DesktopInstalled $t.Id)
-    $found = $Tools -contains $t.Id   # explicit -Tools always installs, even if not detected
-    foreach ($mode in 'terminal', 'desktop') {
-        if ($Modes -notcontains $mode) { continue }
-        $available = if ($mode -eq 'terminal') { $cli } else { $app }
-        if (-not $available -and -not ($found -and ($mode -eq 'terminal' -or $t.Desktop))) { continue }
-        if ($interactive) {
-            $answer = Read-Host "Add '$($t.Name) ($mode)'? [Y/n]"
-            if ($answer -match '^(n|no|nao|não)$') { continue }
-        }
-        $entries += @{ Tool = $t; Mode = $mode }
-    }
-}
-
-if (-not $entries) { throw 'Nothing to install: no supported tool was found. Install Claude Code, Codex or OpenCode, or pass -Tools.' }
-
-# --- Files ------------------------------------------------------------------
 # Copy to a stable location so the repo folder can be deleted afterwards
 $installDir = Join-Path $env:LOCALAPPDATA 'ClaudeCodeContextMenu'
 New-Item -ItemType Directory -Path $installDir -Force | Out-Null
+$configFile = Join-Path $installDir 'config.json'
+
+# --- Detect and choose ------------------------------------------------------
+# Every possible entry, with whether it is available on this machine
+$all = @()
+foreach ($t in $catalog) {
+    $cli = [bool](Get-Command $t.Exe -ErrorAction SilentlyContinue)
+    $app = $t.Desktop -and (Test-DesktopInstalled $t.Id)
+    foreach ($mode in 'terminal', 'desktop') {
+        if ($mode -eq 'desktop' -and -not $t.Desktop) { continue }
+        $available = if ($mode -eq 'terminal') { $cli } else { $app }
+        $selected = ($Modes -contains $mode) -and $(if ($Tools) { $Tools -contains $t.Id } else { $available })
+        $all += [pscustomobject]@{ Key = "$($t.Id)-$mode"; Tool = $t; Mode = $mode; Available = $available; Selected = $selected }
+    }
+}
+
+# -Configure starts from the previous choice instead of from what was detected
+if ($Configure -and -not $Tools -and (Test-Path $configFile)) {
+    $saved = @((Get-Content $configFile -Raw | ConvertFrom-Json).entries)
+    foreach ($e in $all) { $e.Selected = $saved -contains $e.Key }
+}
+
+$interactive = -not $NoPrompt -and [Environment]::UserInteractive -and -not $Tools
+if ($interactive) {
+    while ($true) {
+        Write-Output ''
+        Write-Output 'Which entries should appear in the menu?'
+        for ($i = 0; $i -lt $all.Count; $i++) {
+            $e = $all[$i]
+            $mark = if ($e.Selected) { 'x' } else { ' ' }
+            $note = if ($e.Available) { '' } else { '   (not found on this PC)' }
+            Write-Output ('  [{0}] {1}  {2} ({3}){4}' -f $mark, ($i + 1), $e.Tool.Name, $e.Mode, $note)
+        }
+        $answer = Read-Host 'Type numbers to toggle (e.g. 2 4), A = all, N = none, Enter = confirm'
+        if (-not $answer) { break }
+        switch -Regex ($answer.Trim()) {
+            '^[aA]$' { $all | ForEach-Object { $_.Selected = $true }; continue }
+            '^[nN]$' { $all | ForEach-Object { $_.Selected = $false }; continue }
+            default {
+                foreach ($n in ($answer -split '[\s,]+' | Where-Object { $_ -match '^\d+$' })) {
+                    $idx = [int]$n - 1
+                    if ($idx -ge 0 -and $idx -lt $all.Count) { $all[$idx].Selected = -not $all[$idx].Selected }
+                }
+            }
+        }
+    }
+}
+
+$entries = @($all | Where-Object Selected | ForEach-Object { @{ Tool = $_.Tool; Mode = $_.Mode; Key = $_.Key } })
+if (-not $entries) { throw 'No entries selected: nothing to install. Run again and select at least one (or install Claude Code, Codex or OpenCode).' }
+
+# Remember the choice so -Configure and future installs start from it
+@{ entries = @($entries | ForEach-Object { $_.Key }) } | ConvertTo-Json | Set-Content -Path $configFile -Encoding UTF8
+
+# --- Files ------------------------------------------------------------------
 foreach ($f in 'ai-robot', 'claude-code', 'codex', 'opencode') {
     Copy-Item -Path (Join-Path $PSScriptRoot "assets\$f.ico") -Destination (Join-Path $installDir "$f.ico") -Force
 }

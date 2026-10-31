@@ -4,18 +4,9 @@ Right-click any folder in Windows Explorer → **Open AI here** → pick a tool 
 
 Clique com o botão direito em qualquer pasta → **Abrir IA aqui** → escolha a ferramenta e onde abrir. Sem precisar digitar `cd` antes.
 
-```
-Open AI here ▸  Claude Code (terminal)
-                Claude Code (desktop)
-                ─────────────
-                Codex (terminal)
-                Codex (desktop)
-                ─────────────
-                OpenCode (terminal)
-                OpenCode (desktop, no folder)
-```
+![The "Open AI here" submenu in the Windows Explorer right-click menu](docs/menu.png)
 
-The installer detects what you have and only adds those entries. It works in two places:
+The installer detects what you have and shows only the entries you pick. It works in two places:
 
 - Right-click **on a folder**
 - Right-click the **background inside a folder** (works in empty folders too)
@@ -45,22 +36,39 @@ cd open-claude-here
 powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-The installer lists what it found and asks `[Y/n]` for each entry. No admin rights needed: everything is written under `HKCU` (your user only), plus files copied to `%LOCALAPPDATA%\ClaudeCodeContextMenu`.
+The installer shows a checklist of every entry, with what it found already ticked:
 
-Options:
+```
+Which entries should appear in the menu?
+  [x] 1  Claude Code (terminal)
+  [x] 2  Claude Code (desktop)
+  [x] 3  Codex (terminal)
+  [ ] 4  Codex (desktop)   (not found on this PC)
+  ...
+Type numbers to toggle (e.g. 2 4), A = all, N = none, Enter = confirm
+```
+
+No admin rights needed: everything is written under `HKCU` (your user only), plus files copied to `%LOCALAPPDATA%\ClaudeCodeContextMenu`.
+
+## Choose what appears in the menu
+
+Don't want all the entries? Pick only the ones you use, now or later:
 
 ```powershell
+# reopen the checklist, starting from your previous choice
+.\install.ps1 -Configure
+
 # no questions, install everything detected
 .\install.ps1 -NoPrompt
 
-# choose tools and/or modes yourself
+# only terminal entries, for Claude Code and Codex
 .\install.ps1 -Tools claude,codex -Modes terminal
 
 # custom submenu text
 .\install.ps1 -Label "AI here"
 ```
 
-Re-running the installer replaces the previous menu (including the old single "Open Claude Code here" entry).
+Your choice is saved in `%LOCALAPPDATA%\ClaudeCodeContextMenu\config.json`. Re-running the installer replaces the previous menu (including the old single "Open Claude Code here" entry).
 
 ## Windows 11 note
 
