@@ -38,6 +38,8 @@ cd open-claude-here
 .\setup.cmd
 ```
 
+![The setup screen, with pixel-art logos for the AI robot, Claude Code, Codex and OpenCode](docs/setup.png)
+
 - **Not installed yet:** it offers only **Install**. Press Enter and you get the checklist below, with the recommended entries (what is installed on your PC) already ticked. Press Enter again to confirm.
 - **Already installed:** it offers **Configure** (pick which entries appear) and **Uninstall**.
 

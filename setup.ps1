@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
   Install, configure or uninstall the "Open AI here" right-click submenu in Windows Explorer
   (Claude Code, Codex, OpenCode - in the terminal or in the desktop app).
@@ -49,6 +49,69 @@ function Wait-Close {
 # Arrow keys + Space + Enter when a real keyboard/console is attached. When input is piped
 # (scripts, tests) the typed-number prompts further down are used instead.
 $useKeys = $canAsk -and -not [Console]::IsInputRedirected
+
+# --- Banner (pixel art) -----------------------------------------------------
+# Half-block art in true colour: the AI robot plus one logo per tool. Only shown on a real
+# console; output stays plain when piped.
+function Show-Banner {
+    try {
+        Add-Type -Namespace Win -Name Con -ErrorAction Stop -MemberDefinition @'
+[DllImport("kernel32.dll")] public static extern IntPtr GetStdHandle(int n);
+[DllImport("kernel32.dll")] public static extern bool GetConsoleMode(IntPtr h, out uint m);
+[DllImport("kernel32.dll")] public static extern bool SetConsoleMode(IntPtr h, uint m);
+'@
+    } catch { }   # already added in this session
+    $h = [Win.Con]::GetStdHandle(-11); $mode = [uint32]0
+    [Win.Con]::GetConsoleMode($h, [ref]$mode) | Out-Null
+    if (-not [Win.Con]::SetConsoleMode($h, $mode -bor 4)) { return }   # no ANSI colour support: skip the art
+    [Console]::OutputEncoding = New-Object Text.UTF8Encoding $false
+
+    $e = [char]27
+    # In an art line: ~text~ = white on the art colour (used for ">_"), ^x^ = red on white (eyes)
+    $arts = @(
+        @{ Label = 'AI here'; Rgb = '80;150;230'; Lines = @(
+            '  ▄▄▄▄▄▄▄▄  '
+            ' ██████████ '
+            ' ██^●^████^●^██ '
+            ' ██▄▄▄▄▄▄██ '
+            '  ▀▀▀▀▀▀▀▀  ') }
+        @{ Label = 'Claude Code'; Rgb = '217;119;87'; Lines = @(
+            '            '
+            '  ▄██████▄  '
+            '▄██ ████ ██▄'
+            '████████████'
+            '  ▐▌▐▌▐▌▐▌  ') }
+        @{ Label = 'Codex'; Rgb = '110;130;255'; Lines = @(
+            '   ▄▄██▄▄   '
+            '▄██████████▄'
+            '████~> _~█████'
+            '▀██████████▀'
+            '   ▀▀▀▀▀▀   ') }
+        @{ Label = 'OpenCode'; Rgb = '210;210;210'; Lines = @(
+            '  ▄▄▄▄▄▄▄▄  '
+            '  █▀▀▀▀▀▀█  '
+            '  █ ████ █  '
+            '  █▄▄▄▄▄▄█  '
+            '  ▀▀▀▀▀▀▀▀  ') }
+    )
+    function Paint([string]$line, [string]$rgb) {
+        $o = "${e}[38;2;${rgb}m"; $mode = ''
+        foreach ($ch in $line.ToCharArray()) {
+            if ($ch -eq '~') { if ($mode -eq '~') { $mode = ''; $o += "${e}[0m${e}[38;2;${rgb}m" } else { $mode = '~'; $o += "${e}[48;2;${rgb}m${e}[38;2;255;255;255m" }; continue }
+            if ($ch -eq '^') { if ($mode -eq '^') { $mode = ''; $o += "${e}[0m${e}[38;2;${rgb}m" } else { $mode = '^'; $o += "${e}[48;2;255;255;255m${e}[38;2;220;40;40m" }; continue }
+            $o += $ch
+        }
+        return $o + "${e}[0m"
+    }
+    Write-Host ''
+    for ($r = 0; $r -lt 5; $r++) {
+        $row = ($arts | ForEach-Object { Paint $_.Lines[$r] $_.Rgb }) -join '  '
+        Write-Host ("  " + $row)
+    }
+    $labels = ($arts | ForEach-Object { $_.Label.PadLeft(6 + [int]($_.Label.Length / 2)).PadRight(12) }) -join '  '
+    Write-Host ("  ${e}[90m" + $labels + "${e}[0m")
+}
+if ($useKeys) { Show-Banner }
 
 function Write-MenuLine([string]$text, [bool]$active) {
     $text = $text.PadRight([Math]::Max(1, [Console]::WindowWidth - 1)).Substring(0, [Math]::Max(1, [Console]::WindowWidth - 1))
