@@ -1,0 +1,72 @@
+[
+  {
+    "id": "claude",
+    "name": "Claude Code",
+    "color": "217;119;87",
+    "glyph": "-*-",
+    "icon": "claude-code.ico",
+    "tested": true,
+    "terminal": { "exe": "claude", "command": "claude" },
+    "desktop": {
+      "detect": { "appx": "Claude" },
+      "open": { "uri": "claude://code/new?folder={folderEncoded}" }
+    }
+  },
+  {
+    "id": "codex",
+    "name": "Codex",
+    "color": "110;130;255",
+    "glyph": "(~)",
+    "icon": "codex.ico",
+    "tested": true,
+    "terminal": { "exe": "codex", "command": "codex" },
+    "desktop": {
+      "detect": { "appx": "OpenAI.Codex" },
+      "open": { "run": ["codex", "app", "{folder}"] }
+    }
+  },
+  {
+    "id": "opencode",
+    "name": "OpenCode",
+    "color": "170;170;170",
+    "glyph": "{o}",
+    "icon": "opencode.ico",
+    "tested": true,
+    "terminal": { "exe": "opencode", "command": "opencode" },
+    "desktop": {
+      "note": "no folder",
+      "detect": { "path": "%LOCALAPPDATA%\\Programs\\ai.opencode.desktop\\OpenCode.exe" },
+      "open": { "launch": "%LOCALAPPDATA%\\Programs\\ai.opencode.desktop\\OpenCode.exe" }
+    }
+  },
+  {
+    "id": "gemini",
+    "name": "Gemini CLI",
+    "color": "66;133;244",
+    "glyph": "<*>",
+    "icon": "gemini.ico",
+    "tested": false,
+    "terminal": { "exe": "gemini", "command": "gemini" }
+  },
+  {
+    "id": "copilot",
+    "name": "GitHub Copilot CLI",
+    "color": "160;110;230",
+    "glyph": "(o)",
+    "icon": "copilot.ico",
+    "tested": false,
+    "terminal": { "exe": "copilot", "command": "copilot" }
+  },
+  {
+    "id": "cursor",
+    "name": "Cursor",
+    "color": "235;235;235",
+    "glyph": "[>]",
+    "icon": "cursor.ico",
+    "tested": false,
+    "desktop": {
+      "detect": { "exe": "cursor" },
+      "open": { "run": ["cursor", "{folder}"] }
+    }
+  }
+]
