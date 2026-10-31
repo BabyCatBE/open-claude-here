@@ -4,6 +4,10 @@ Right-click any folder in Windows Explorer → **Open AI here** → pick a tool 
 
 Clique com o botão direito em qualquer pasta → **Abrir IA aqui** → escolha a ferramenta e onde abrir. Sem precisar digitar `cd` antes.
 
+> **Tested with 3 tools only.** Claude Code, Codex and OpenCode were tested by the author, on Windows 11. Gemini CLI, GitHub Copilot CLI and Cursor are included but were **not tested** (see [What opens what](#what-opens-what)); please [open an issue](https://github.com/BabyCatBE/open-claude-here/issues) if one misbehaves.
+>
+> **OpenCode note:** the OpenCode desktop app cannot open a specific folder from outside, so its desktop entry only opens the app. The OpenCode terminal entry opens straight in the folder.
+
 ![The "Open AI here" submenu in the Windows Explorer right-click menu](docs/menu.png)
 
 The installer detects what you have and shows only the entries you pick. It works in two places:
