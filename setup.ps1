@@ -1,30 +1,106 @@
-﻿<#
+<#
 .SYNOPSIS
-  Adds an "Open AI here" submenu to the Windows Explorer right-click menu
+  Install, configure or uninstall the "Open AI here" right-click submenu in Windows Explorer
   (Claude Code, Codex, OpenCode - in the terminal or in the desktop app).
+
+  Run it with no arguments: if the menu is not installed it offers to install it; if it is
+  installed it offers Configure and Uninstall.
+.PARAMETER Action
+  install | configure | uninstall. Skips the question.
 .PARAMETER Label
   Text of the submenu. Defaults to Portuguese if the system language is pt, otherwise English.
 .PARAMETER Tools
   Which tools to add: claude, codex, opencode. Default: every tool found on this machine.
 .PARAMETER Modes
-  terminal, desktop. Default: both (desktop only where the tool supports opening a folder).
+  terminal, desktop. Default: both.
 .PARAMETER NoPrompt
   Do not ask questions; install everything that was detected (or selected with -Tools/-Modes).
-.PARAMETER Configure
-  Reopen the checklist to change which entries appear, starting from your previous choice.
 #>
 param(
+    [ValidateSet('install', 'configure', 'uninstall')][string]$Action,
     [string]$Label,
     [ValidateSet('claude', 'codex', 'opencode')][string[]]$Tools,
     [ValidateSet('terminal', 'desktop')][string[]]$Modes = @('terminal', 'desktop'),
-    [switch]$NoPrompt,
-    [switch]$Configure
+    [switch]$NoPrompt
 )
 
 $ErrorActionPreference = 'Stop'
 $pt = (Get-UICulture).TwoLetterISOLanguageName -eq 'pt'
+$canAsk = -not $NoPrompt -and [Environment]::UserInteractive
 
-# --- Tool table -------------------------------------------------------------
+# --- Locations --------------------------------------------------------------
+$classes    = 'HKCU:\Software\Classes'
+$menuKey    = "$classes\Directory\ContextMenus\AIHere"
+$parentKeys = "$classes\Directory\shell\AIHere", "$classes\Directory\Background\shell\AIHere"
+$legacyKeys = "$classes\Directory\shell\ClaudeCode", "$classes\Directory\Background\shell\ClaudeCode"
+# Everything is copied to a stable place, so the cloned repo can be deleted afterwards and the
+# menu can still be configured or uninstalled (this script also runs from there).
+$installDir = Join-Path $env:LOCALAPPDATA 'ClaudeCodeContextMenu'
+$configFile = Join-Path $installDir 'config.json'
+$programs   = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'
+$lnkPath    = Join-Path $programs 'Open AI here - Setup.lnk'
+
+function Wait-Close {
+    # setup.cmd sets this so a double-clicked window stays open until the user has read it
+    if ($env:AIHERE_PAUSE) { Read-Host 'Press Enter to close' | Out-Null }
+}
+
+# --- What to do -------------------------------------------------------------
+$installed = Test-Path $parentKeys[0]
+
+if (-not $Action) {
+    if ($canAsk -and -not $Tools) {
+        Write-Output ''
+        if ($installed) {
+            Write-Output 'Open AI here is installed.'
+            Write-Output '  [1] Configure  - choose which entries appear in the menu'
+            Write-Output '  [2] Uninstall'
+            Write-Output '  [Q] Quit'
+            switch -Regex ((Read-Host 'Choose').Trim()) {
+                '^1$'   { $Action = 'configure' }
+                '^2$'   { $Action = 'uninstall' }
+                default { exit 0 }
+            }
+        } else {
+            Write-Output 'Open AI here is not installed.'
+            $answer = Read-Host 'Press Enter to install (Q to quit)'
+            if ($answer -match '^[qQ]') { exit 0 }
+            $Action = 'install'
+        }
+    } else {
+        $Action = 'install'
+    }
+}
+# nothing to configure yet: configuring a missing install is just installing
+if ($Action -eq 'configure' -and -not $installed) { $Action = 'install' }
+
+# --- Uninstall --------------------------------------------------------------
+if ($Action -eq 'uninstall') {
+    foreach ($key in $parentKeys + $menuKey + $legacyKeys) {
+        Remove-Item $key -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    Remove-Item $lnkPath -Force -ErrorAction SilentlyContinue
+    Remove-Item (Join-Path $programs 'Open AI here - Configure.lnk') -Force -ErrorAction SilentlyContinue
+    if ($PSScriptRoot -eq $installDir) {
+        # we are running from the folder we want to delete: remove it once this script has exited
+        Start-Process cmd.exe -WindowStyle Hidden -ArgumentList "/c ping -n 4 127.0.0.1 >nul & rmdir /s /q `"$installDir`""
+    } else {
+        Remove-Item $installDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    Write-Output 'Uninstalled.'
+    Wait-Close
+    exit 0
+}
+
+# --- Install / Configure ----------------------------------------------------
+New-Item -ItemType Directory -Path $installDir -Force | Out-Null
+$savedConfig = if (Test-Path $configFile) { Get-Content $configFile -Raw | ConvertFrom-Json } else { $null }
+
+# Menu text: -Label, else the one saved last time, else a default for the system language
+if (-not $Label) {
+    $Label = if ($savedConfig.label) { $savedConfig.label } elseif ($pt) { 'Abrir IA aqui' } else { 'Open AI here' }
+}
+
 # OpenCode Desktop has no way to open a folder from outside (its opencode:// links only handle
 # login), so its desktop entry only launches the app.
 $catalog = @(
@@ -35,27 +111,14 @@ $catalog = @(
 
 function Test-DesktopInstalled([string]$id) {
     switch ($id) {
-        'claude' { return [bool](Get-AppxPackage -Name 'Claude' -ErrorAction SilentlyContinue) }
-        'codex'  { return [bool](Get-AppxPackage -Name 'OpenAI.Codex' -ErrorAction SilentlyContinue) }
+        'claude'   { return [bool](Get-AppxPackage -Name 'Claude' -ErrorAction SilentlyContinue) }
+        'codex'    { return [bool](Get-AppxPackage -Name 'OpenAI.Codex' -ErrorAction SilentlyContinue) }
         'opencode' { return Test-Path (Join-Path $env:LOCALAPPDATA 'Programs\ai.opencode.desktop\OpenCode.exe') }
-        default  { return $false }
+        default    { return $false }
     }
 }
 
-# Everything is copied to a stable location, so the cloned repo can be deleted afterwards
-# and the menu can still be reconfigured (this script also runs from there).
-$installDir = Join-Path $env:LOCALAPPDATA 'ClaudeCodeContextMenu'
-New-Item -ItemType Directory -Path $installDir -Force | Out-Null
-$configFile = Join-Path $installDir 'config.json'
-$savedConfig = if (Test-Path $configFile) { Get-Content $configFile -Raw | ConvertFrom-Json } else { $null }
-
-# Menu text: -Label, else the one saved last time, else a default for the system language
-if (-not $Label) {
-    $Label = if ($savedConfig.label) { $savedConfig.label } elseif ($pt) { 'Abrir IA aqui' } else { 'Open AI here' }
-}
-
-# --- Detect and choose ------------------------------------------------------
-# Every possible entry, with whether it is available on this machine
+# Every possible entry. The recommended selection is "what is installed on this PC".
 $all = @()
 foreach ($t in $catalog) {
     $cli = [bool](Get-Command $t.Exe -ErrorAction SilentlyContinue)
@@ -68,17 +131,17 @@ foreach ($t in $catalog) {
     }
 }
 
-# -Configure starts from the previous choice instead of from what was detected
-if ($Configure -and -not $Tools -and $savedConfig) {
+# Configure starts from the previous choice instead of from the recommendation
+if ($Action -eq 'configure' -and -not $Tools -and $savedConfig) {
     $saved = @($savedConfig.entries)
     foreach ($e in $all) { $e.Selected = $saved -contains $e.Key }
 }
 
-$interactive = -not $NoPrompt -and [Environment]::UserInteractive -and -not $Tools
-if ($interactive) {
+if ($canAsk -and -not $Tools) {
+    $heading = if ($Action -eq 'configure') { 'Which entries should appear in the menu?' } else { 'Which entries should appear in the menu? (recommended ones are ticked)' }
     while ($true) {
         Write-Output ''
-        Write-Output 'Which entries should appear in the menu?'
+        Write-Output $heading
         for ($i = 0; $i -lt $all.Count; $i++) {
             $e = $all[$i]
             $mark = if ($e.Selected) { 'x' } else { ' ' }
@@ -103,37 +166,33 @@ if ($interactive) {
 $entries = @($all | Where-Object Selected | ForEach-Object { @{ Tool = $_.Tool; Mode = $_.Mode; Key = $_.Key } })
 if (-not $entries) { throw 'No entries selected: nothing to install. Run again and select at least one (or install Claude Code, Codex or OpenCode).' }
 
-# Remember the choice so -Configure and future installs start from it
+# Remember the choice so Configure starts from it
 @{ label = $Label; entries = @($entries | ForEach-Object { $_.Key }) } | ConvertTo-Json | Set-Content -Path $configFile -Encoding UTF8
 
 # --- Files ------------------------------------------------------------------
 function Copy-Here([string]$from, [string]$to) {
-    # skip when the installer is already running from the install folder
-    if ((Resolve-Path $from).Path -ne [IO.Path]::GetFullPath($to)) {
-        Copy-Item -Path $from -Destination $to -Force
-    }
+    # skip when we are already running from the install folder
+    if ((Resolve-Path $from).Path -ne [IO.Path]::GetFullPath($to)) { Copy-Item -Path $from -Destination $to -Force }
 }
 # in the repo the icons are in assets\, in the install folder they sit next to this script
 $assetDir = if (Test-Path (Join-Path $PSScriptRoot 'assets')) { Join-Path $PSScriptRoot 'assets' } else { $PSScriptRoot }
 foreach ($f in 'ai-robot', 'claude-code', 'codex', 'opencode') {
     Copy-Here (Join-Path $assetDir "$f.ico") (Join-Path $installDir "$f.ico")
 }
-foreach ($f in 'install.ps1', 'uninstall.ps1', 'open-ai-desktop.ps1') {
+foreach ($f in 'setup.ps1', 'setup.cmd', 'open-ai-desktop.ps1') {
     Copy-Here (Join-Path $PSScriptRoot $f) (Join-Path $installDir $f)
 }
+# files from earlier versions
+foreach ($f in 'install.ps1', 'uninstall.ps1', 'configure.cmd') { Remove-Item (Join-Path $installDir $f) -Force -ErrorAction SilentlyContinue }
+Remove-Item (Join-Path $programs 'Open AI here - Configure.lnk') -Force -ErrorAction SilentlyContinue
+
 $robotIcon = Join-Path $installDir 'ai-robot.ico'
 $iconFile = @{ claude = 'claude-code.ico'; codex = 'codex.ico'; opencode = 'opencode.ico' }
 $helper = Join-Path $installDir 'open-ai-desktop.ps1'
 
-# Double-clickable reconfigure (works without the repo) + Start menu shortcut
-Set-Content -Path (Join-Path $installDir 'configure.cmd') -Encoding ASCII -Value @(
-    '@echo off',
-    'powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0install.ps1" -Configure',
-    'pause'
-)
-$lnkPath = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Open AI here - Configure.lnk'
+# Start menu shortcut to this same setup (works without the repo)
 $lnk = (New-Object -ComObject WScript.Shell).CreateShortcut($lnkPath)
-$lnk.TargetPath = Join-Path $installDir 'configure.cmd'
+$lnk.TargetPath = Join-Path $installDir 'setup.cmd'
 $lnk.WorkingDirectory = $installDir
 $lnk.IconLocation = $robotIcon
 $lnk.Save()
@@ -156,12 +215,8 @@ function Get-DesktopCommand($t) {
 }
 
 # --- Registry ---------------------------------------------------------------
-$classes = 'HKCU:\Software\Classes'
-$menuKey = "$classes\Directory\ContextMenus\AIHere"
-
 # Remove previous installs (old single-entry version and earlier runs of this one)
-foreach ($old in "$classes\Directory\shell\ClaudeCode", "$classes\Directory\Background\shell\ClaudeCode",
-                 "$classes\Directory\shell\AIHere", "$classes\Directory\Background\shell\AIHere", $menuKey) {
+foreach ($old in $parentKeys + $menuKey + $legacyKeys) {
     Remove-Item -Path $old -Recurse -Force -ErrorAction SilentlyContinue
 }
 
@@ -183,13 +238,16 @@ foreach ($e in $entries) {
     Set-ItemProperty -Path "$item\command" -Name '(Default)' -Value $cmd
 }
 
-foreach ($parent in "$classes\Directory\shell\AIHere", "$classes\Directory\Background\shell\AIHere") {
+foreach ($parent in $parentKeys) {
     New-Item -Path $parent -Force | Out-Null
     Set-ItemProperty -Path $parent -Name 'MUIVerb' -Value $Label
     Set-ItemProperty -Path $parent -Name 'Icon' -Value $robotIcon
     Set-ItemProperty -Path $parent -Name 'ExtendedSubCommandsKey' -Value 'Directory\ContextMenus\AIHere'
 }
 
+Write-Output ''
 Write-Output "Installed '$Label' with:"
 $entries | ForEach-Object { Write-Output ("  - {0} ({1})" -f $_.Tool.Name, $_.Mode) }
 Write-Output "On Windows 11 it is under 'Show more options' (Shift+right-click)."
+Write-Output "To change this later, open 'Open AI here - Setup' from the Start menu."
+Wait-Close

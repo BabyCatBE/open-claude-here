@@ -28,15 +28,20 @@ The installer detects what you have and shows only the entries you pick. It work
 - At least one of: [Claude Code](https://claude.com/claude-code), [Codex](https://developers.openai.com/codex), [OpenCode](https://opencode.ai) (CLI in your PATH, and/or the desktop app)
 - [Windows Terminal](https://aka.ms/terminal) (recommended; falls back to `cmd.exe` if missing)
 
-## Install
+## Install, configure, uninstall
+
+One file does all three: **`setup.cmd`**. Download or clone the repo and double-click it.
 
 ```powershell
 git clone https://github.com/BabyCatBE/open-claude-here.git
 cd open-claude-here
-powershell -ExecutionPolicy Bypass -File .\install.ps1
+.\setup.cmd
 ```
 
-The installer shows a checklist of every entry, with what it found already ticked:
+- **Not installed yet:** it offers only **Install**. Press Enter and you get the checklist below, with the recommended entries (what is installed on your PC) already ticked. Press Enter again to confirm.
+- **Already installed:** it offers **Configure** (pick which entries appear) and **Uninstall**.
+
+The checklist shows every entry, with what it found already ticked:
 
 ```
 Which entries should appear in the menu?
@@ -54,28 +59,25 @@ No admin rights needed: everything is written under `HKCU` (your user only), plu
 
 Don't want all the entries? Pick only the ones you use, now or later.
 
-**Changing it after install** works even if you delete the cloned repo, because the installer keeps its own copy in `%LOCALAPPDATA%\ClaudeCodeContextMenu`. Either:
+**Changing it after install** works even if you delete the cloned repo, because setup keeps its own copy in `%LOCALAPPDATA%\ClaudeCodeContextMenu`. Open **Open AI here - Setup** from the Start menu (or run `setup.cmd` from that folder) and choose **Configure**. The checklist opens with your previous choice.
 
-- open **Open AI here - Configure** from the Start menu, or
-- run `%LOCALAPPDATA%\ClaudeCodeContextMenu\configure.cmd`
-
-Both reopen the checklist starting from your previous choice. Other ways:
+Without any questions (for scripts):
 
 ```powershell
-# same thing from the cloned repo
-.\install.ps1 -Configure
-
-# no questions, install everything detected
-.\install.ps1 -NoPrompt
+# install everything detected
+.\setup.ps1 -NoPrompt
 
 # only terminal entries, for Claude Code and Codex
-.\install.ps1 -Tools claude,codex -Modes terminal
+.\setup.ps1 -Tools claude,codex -Modes terminal
 
 # custom submenu text
-.\install.ps1 -Label "AI here"
+.\setup.ps1 -Label "AI here"
+
+# skip the question: -Action install | configure | uninstall
+.\setup.ps1 -Action configure
 ```
 
-Your choice (and the menu text) is saved in `%LOCALAPPDATA%\ClaudeCodeContextMenu\config.json`. Re-running the installer replaces the previous menu (including the old single "Open Claude Code here" entry).
+Your choice (and the menu text) is saved in `%LOCALAPPDATA%\ClaudeCodeContextMenu\config.json`. Running setup again replaces the previous menu (including the old single "Open Claude Code here" entry).
 
 ## Windows 11 note
 
@@ -83,11 +85,7 @@ Windows 11's new context menu hides classic entries. Use **Show more options** (
 
 ## Uninstall
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\uninstall.ps1
-```
-
-Without the repo: `powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\ClaudeCodeContextMenu\uninstall.ps1"`. It removes the menu, the Start menu shortcut and the install folder.
+Open `setup.cmd` (from the repo, or **Open AI here - Setup** in the Start menu) and choose **Uninstall**. It removes the menu, the Start menu shortcut and the install folder. Or: `.\setup.ps1 -Action uninstall`.
 
 ## How it works
 
