@@ -8,5 +8,6 @@ foreach ($key in
     "$classes\Directory\Background\shell\ClaudeCode") {
     Remove-Item $key -Recurse -Force -ErrorAction SilentlyContinue
 }
+Remove-Item (Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Open AI here - Configure.lnk') -Force -ErrorAction SilentlyContinue
 Remove-Item (Join-Path $env:LOCALAPPDATA 'ClaudeCodeContextMenu') -Recurse -Force -ErrorAction SilentlyContinue
 Write-Output 'Uninstalled.'

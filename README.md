@@ -52,10 +52,17 @@ No admin rights needed: everything is written under `HKCU` (your user only), plu
 
 ## Choose what appears in the menu
 
-Don't want all the entries? Pick only the ones you use, now or later:
+Don't want all the entries? Pick only the ones you use, now or later.
+
+**Changing it after install** works even if you delete the cloned repo, because the installer keeps its own copy in `%LOCALAPPDATA%\ClaudeCodeContextMenu`. Either:
+
+- open **Open AI here - Configure** from the Start menu, or
+- run `%LOCALAPPDATA%\ClaudeCodeContextMenu\configure.cmd`
+
+Both reopen the checklist starting from your previous choice. Other ways:
 
 ```powershell
-# reopen the checklist, starting from your previous choice
+# same thing from the cloned repo
 .\install.ps1 -Configure
 
 # no questions, install everything detected
@@ -68,7 +75,7 @@ Don't want all the entries? Pick only the ones you use, now or later:
 .\install.ps1 -Label "AI here"
 ```
 
-Your choice is saved in `%LOCALAPPDATA%\ClaudeCodeContextMenu\config.json`. Re-running the installer replaces the previous menu (including the old single "Open Claude Code here" entry).
+Your choice (and the menu text) is saved in `%LOCALAPPDATA%\ClaudeCodeContextMenu\config.json`. Re-running the installer replaces the previous menu (including the old single "Open Claude Code here" entry).
 
 ## Windows 11 note
 
@@ -79,6 +86,8 @@ Windows 11's new context menu hides classic entries. Use **Show more options** (
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\uninstall.ps1
 ```
+
+Without the repo: `powershell -ExecutionPolicy Bypass -File "$env:LOCALAPPDATA\ClaudeCodeContextMenu\uninstall.ps1"`. It removes the menu, the Start menu shortcut and the install folder.
 
 ## How it works
 

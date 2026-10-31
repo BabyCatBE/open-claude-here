@@ -23,7 +23,6 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $pt = (Get-UICulture).TwoLetterISOLanguageName -eq 'pt'
-if (-not $Label) { $Label = if ($pt) { 'Abrir IA aqui' } else { 'Open AI here' } }
 
 # --- Tool table -------------------------------------------------------------
 # OpenCode Desktop has no way to open a folder from outside (its opencode:// links only handle
@@ -43,10 +42,17 @@ function Test-DesktopInstalled([string]$id) {
     }
 }
 
-# Copy to a stable location so the repo folder can be deleted afterwards
+# Everything is copied to a stable location, so the cloned repo can be deleted afterwards
+# and the menu can still be reconfigured (this script also runs from there).
 $installDir = Join-Path $env:LOCALAPPDATA 'ClaudeCodeContextMenu'
 New-Item -ItemType Directory -Path $installDir -Force | Out-Null
 $configFile = Join-Path $installDir 'config.json'
+$savedConfig = if (Test-Path $configFile) { Get-Content $configFile -Raw | ConvertFrom-Json } else { $null }
+
+# Menu text: -Label, else the one saved last time, else a default for the system language
+if (-not $Label) {
+    $Label = if ($savedConfig.label) { $savedConfig.label } elseif ($pt) { 'Abrir IA aqui' } else { 'Open AI here' }
+}
 
 # --- Detect and choose ------------------------------------------------------
 # Every possible entry, with whether it is available on this machine
@@ -63,8 +69,8 @@ foreach ($t in $catalog) {
 }
 
 # -Configure starts from the previous choice instead of from what was detected
-if ($Configure -and -not $Tools -and (Test-Path $configFile)) {
-    $saved = @((Get-Content $configFile -Raw | ConvertFrom-Json).entries)
+if ($Configure -and -not $Tools -and $savedConfig) {
+    $saved = @($savedConfig.entries)
     foreach ($e in $all) { $e.Selected = $saved -contains $e.Key }
 }
 
@@ -98,16 +104,39 @@ $entries = @($all | Where-Object Selected | ForEach-Object { @{ Tool = $_.Tool; 
 if (-not $entries) { throw 'No entries selected: nothing to install. Run again and select at least one (or install Claude Code, Codex or OpenCode).' }
 
 # Remember the choice so -Configure and future installs start from it
-@{ entries = @($entries | ForEach-Object { $_.Key }) } | ConvertTo-Json | Set-Content -Path $configFile -Encoding UTF8
+@{ label = $Label; entries = @($entries | ForEach-Object { $_.Key }) } | ConvertTo-Json | Set-Content -Path $configFile -Encoding UTF8
 
 # --- Files ------------------------------------------------------------------
+function Copy-Here([string]$from, [string]$to) {
+    # skip when the installer is already running from the install folder
+    if ((Resolve-Path $from).Path -ne [IO.Path]::GetFullPath($to)) {
+        Copy-Item -Path $from -Destination $to -Force
+    }
+}
+# in the repo the icons are in assets\, in the install folder they sit next to this script
+$assetDir = if (Test-Path (Join-Path $PSScriptRoot 'assets')) { Join-Path $PSScriptRoot 'assets' } else { $PSScriptRoot }
 foreach ($f in 'ai-robot', 'claude-code', 'codex', 'opencode') {
-    Copy-Item -Path (Join-Path $PSScriptRoot "assets\$f.ico") -Destination (Join-Path $installDir "$f.ico") -Force
+    Copy-Here (Join-Path $assetDir "$f.ico") (Join-Path $installDir "$f.ico")
+}
+foreach ($f in 'install.ps1', 'uninstall.ps1', 'open-ai-desktop.ps1') {
+    Copy-Here (Join-Path $PSScriptRoot $f) (Join-Path $installDir $f)
 }
 $robotIcon = Join-Path $installDir 'ai-robot.ico'
 $iconFile = @{ claude = 'claude-code.ico'; codex = 'codex.ico'; opencode = 'opencode.ico' }
 $helper = Join-Path $installDir 'open-ai-desktop.ps1'
-Copy-Item -Path (Join-Path $PSScriptRoot 'open-ai-desktop.ps1') -Destination $helper -Force
+
+# Double-clickable reconfigure (works without the repo) + Start menu shortcut
+Set-Content -Path (Join-Path $installDir 'configure.cmd') -Encoding ASCII -Value @(
+    '@echo off',
+    'powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0install.ps1" -Configure',
+    'pause'
+)
+$lnkPath = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Open AI here - Configure.lnk'
+$lnk = (New-Object -ComObject WScript.Shell).CreateShortcut($lnkPath)
+$lnk.TargetPath = Join-Path $installDir 'configure.cmd'
+$lnk.WorkingDirectory = $installDir
+$lnk.IconLocation = $robotIcon
+$lnk.Save()
 
 # --- Commands ---------------------------------------------------------------
 $hasWt = [bool](Get-Command wt.exe -ErrorAction SilentlyContinue)
