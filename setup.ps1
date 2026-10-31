@@ -45,11 +45,92 @@ function Wait-Close {
     if ($env:AIHERE_PAUSE) { Read-Host 'Press Enter to close' | Out-Null }
 }
 
+# --- Keyboard menus ---------------------------------------------------------
+# Arrow keys + Space + Enter when a real keyboard/console is attached. When input is piped
+# (scripts, tests) the typed-number prompts further down are used instead.
+$useKeys = $canAsk -and -not [Console]::IsInputRedirected
+
+function Write-MenuLine([string]$text, [bool]$active) {
+    $text = $text.PadRight([Math]::Max(1, [Console]::WindowWidth - 1)).Substring(0, [Math]::Max(1, [Console]::WindowWidth - 1))
+    if ($active) { Write-Host $text -NoNewline -ForegroundColor Black -BackgroundColor White }
+    else { Write-Host $text -NoNewline }
+}
+
+# Pick one item. Returns its index, or -1 on Esc.
+function Select-Menu([string]$Title, [string[]]$Options, [string]$Hint) {
+    Write-Host ''
+    Write-Host $Title
+    foreach ($o in $Options) { Write-Host '' }
+    Write-Host $Hint -ForegroundColor DarkGray
+    $top = [Console]::CursorTop - ($Options.Count + 1)
+    $sel = 0
+    [Console]::CursorVisible = $false
+    try {
+        while ($true) {
+            for ($i = 0; $i -lt $Options.Count; $i++) {
+                [Console]::SetCursorPosition(0, $top + $i)
+                Write-MenuLine ("  {0} {1}" -f $(if ($i -eq $sel) { '>' } else { ' ' }), $Options[$i]) ($i -eq $sel)
+            }
+            switch ([Console]::ReadKey($true).Key) {
+                'UpArrow'   { $sel = ($sel - 1 + $Options.Count) % $Options.Count }
+                'DownArrow' { $sel = ($sel + 1) % $Options.Count }
+                'Enter'     { return $sel }
+                'Escape'    { return -1 }
+            }
+        }
+    } finally {
+        [Console]::CursorVisible = $true
+        [Console]::SetCursorPosition(0, $top + $Options.Count + 1)
+    }
+}
+
+# Tick/untick entries. Changes .Selected on the items; returns $false on Esc.
+function Select-Entries([string]$Title, $Items) {
+    Write-Host ''
+    Write-Host $Title
+    foreach ($e in $Items) { Write-Host '' }
+    Write-Host 'Up/Down move   Space tick/untick   A all   N none   Enter confirm   Esc cancel' -ForegroundColor DarkGray
+    $top = [Console]::CursorTop - ($Items.Count + 1)
+    $cur = 0
+    [Console]::CursorVisible = $false
+    try {
+        while ($true) {
+            for ($i = 0; $i -lt $Items.Count; $i++) {
+                $e = $Items[$i]
+                $note = if ($e.Available) { '' } else { '   (not found on this PC)' }
+                [Console]::SetCursorPosition(0, $top + $i)
+                Write-MenuLine ("  {0} [{1}] {2} ({3}){4}" -f $(if ($i -eq $cur) { '>' } else { ' ' }), $(if ($e.Selected) { 'x' } else { ' ' }), $e.Tool.Name, $e.Mode, $note) ($i -eq $cur)
+            }
+            switch ([Console]::ReadKey($true).Key) {
+                'UpArrow'   { $cur = ($cur - 1 + $Items.Count) % $Items.Count }
+                'DownArrow' { $cur = ($cur + 1) % $Items.Count }
+                'Spacebar'  { $Items[$cur].Selected = -not $Items[$cur].Selected }
+                'A'         { $Items | ForEach-Object { $_.Selected = $true } }
+                'N'         { $Items | ForEach-Object { $_.Selected = $false } }
+                'Enter'     { return $true }
+                'Escape'    { return $false }
+            }
+        }
+    } finally {
+        [Console]::CursorVisible = $true
+        [Console]::SetCursorPosition(0, $top + $Items.Count + 1)
+    }
+}
+
 # --- What to do -------------------------------------------------------------
 $installed = Test-Path $parentKeys[0]
 
 if (-not $Action) {
-    if ($canAsk -and -not $Tools) {
+    if ($useKeys -and -not $Tools) {
+        if ($installed) {
+            $pick = Select-Menu 'Open AI here is installed.' @('Configure  - choose which entries appear in the menu', 'Uninstall') 'Up/Down move   Enter select   Esc quit'
+            $Action = switch ($pick) { 0 { 'configure' } 1 { 'uninstall' } default { exit 0 } }
+        } else {
+            $pick = Select-Menu 'Open AI here is not installed.' @('Install  - you will pick what appears in the menu next') 'Enter install   Esc quit'
+            if ($pick -ne 0) { exit 0 }
+            $Action = 'install'
+        }
+    } elseif ($canAsk -and -not $Tools) {
         Write-Output ''
         if ($installed) {
             Write-Output 'Open AI here is installed.'
@@ -137,8 +218,10 @@ if ($Action -eq 'configure' -and -not $Tools -and $savedConfig) {
     foreach ($e in $all) { $e.Selected = $saved -contains $e.Key }
 }
 
-if ($canAsk -and -not $Tools) {
-    $heading = if ($Action -eq 'configure') { 'Which entries should appear in the menu?' } else { 'Which entries should appear in the menu? (recommended ones are ticked)' }
+$heading = if ($Action -eq 'configure') { 'Which entries should appear in the menu?' } else { 'Which entries should appear in the menu? (recommended ones are ticked)' }
+if ($useKeys -and -not $Tools) {
+    if (-not (Select-Entries $heading $all)) { Write-Output 'Cancelled. Nothing was changed.'; Wait-Close; exit 0 }
+} elseif ($canAsk -and -not $Tools) {
     while ($true) {
         Write-Output ''
         Write-Output $heading

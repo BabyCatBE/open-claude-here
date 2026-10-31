@@ -41,17 +41,26 @@ cd open-claude-here
 - **Not installed yet:** it offers only **Install**. Press Enter and you get the checklist below, with the recommended entries (what is installed on your PC) already ticked. Press Enter again to confirm.
 - **Already installed:** it offers **Configure** (pick which entries appear) and **Uninstall**.
 
-The checklist shows every entry, with what it found already ticked:
+The checklist shows every entry, with what it found already ticked. Use the keyboard:
+
+| Key | Action |
+|---|---|
+| **Up / Down** | move between entries |
+| **Space** | tick or untick the highlighted entry |
+| **A** / **N** | tick all / untick all |
+| **Enter** | confirm |
+| **Esc** | cancel without changing anything |
 
 ```
 Which entries should appear in the menu?
-  [x] 1  Claude Code (terminal)
-  [x] 2  Claude Code (desktop)
-  [x] 3  Codex (terminal)
-  [ ] 4  Codex (desktop)   (not found on this PC)
-  ...
-Type numbers to toggle (e.g. 2 4), A = all, N = none, Enter = confirm
+    [x] Claude Code (terminal)
+    [x] Claude Code (desktop)
+    [x] Codex (terminal)
+  > [ ] Codex (desktop)   (not found on this PC)
+    ...
 ```
+
+The Configure / Uninstall question works the same way (Up / Down, Enter, Esc). When setup is run from a script with piped input, it falls back to typing numbers.
 
 No admin rights needed: everything is written under `HKCU` (your user only), plus files copied to `%LOCALAPPDATA%\ClaudeCodeContextMenu`.
 
